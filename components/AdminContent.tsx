@@ -1,75 +1,380 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import LogoutButton from "./LogoutButton";
+import MealsOnWheelsLogo from "./MealsOnWheelsLogo";
+import AdminDashboard from "./admin/AdminDashboard";
+import DayView from "./admin/DayView";
+import RouteSidebar from "./admin/RouteSidebar";
+import { getWeekRange, getNextWeek, getPreviousWeek, getWeekDays } from "@/lib/utils/dateUtils";
+import {
+  getOrCreateWeek,
+  getRoutes,
+  getAssignments,
+  assignVolunteer,
+  copyPreviousWeek,
+  publishWeek,
+  Week,
+  Route,
+  Assignment,
+} from "@/lib/supabase/admin";
+import { categorizeVolunteers, getAllVolunteers, CategorizedVolunteers } from "@/lib/supabase/volunteers";
 
 export default function AdminContent() {
+  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(new Date());
+  const [currentWeek, setCurrentWeek] = useState<Week | null>(null);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+  const [selectedRouteNumber, setSelectedRouteNumber] = useState<number | null>(null);
+  const [routes, setRoutes] = useState<Route[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [volunteers, setVolunteers] = useState<any[]>([]);
+  const [categorized, setCategorized] = useState<CategorizedVolunteers>({
+    available: [],
+    alreadyScheduled: [],
+    notAvailable: [],
+  });
+  const [loading, setLoading] = useState(true);
+  const [copyingWeek, setCopyingWeek] = useState(false);
+  const [publishingWeek, setPublishingWeek] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Clear messages after 5 seconds
+  useEffect(() => {
+    if (errorMessage || successMessage) {
+      const timer = setTimeout(() => {
+        setErrorMessage(null);
+        setSuccessMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [errorMessage, successMessage]);
+
+  // Initialize week on mount
+  useEffect(() => {
+    const { start } = getWeekRange(new Date());
+    setCurrentWeekStart(start);
+  }, []);
+
+  // Load data when week changes
+  useEffect(() => {
+    loadWeekData();
+  }, [currentWeekStart]);
+
+  // Load volunteers categorization when day/week changes
+  useEffect(() => {
+    if (selectedDay && currentWeek) {
+      loadVolunteerCategories();
+    }
+  }, [selectedDay, currentWeek, assignments]);
+
+  const loadWeekData = async () => {
+    setLoading(true);
+    try {
+      const { start, end } = getWeekRange(currentWeekStart);
+      const week = await getOrCreateWeek(start, end);
+      setCurrentWeek(week);
+
+      if (week) {
+        const [routesData, assignmentsData, volunteersData] = await Promise.all([
+          getRoutes(),
+          getAssignments(week.id),
+          getAllVolunteers(),
+        ]);
+
+        setRoutes(routesData);
+        setAssignments(assignmentsData);
+        setVolunteers(volunteersData);
+      }
+    } catch (error) {
+      console.error("Error loading week data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadVolunteerCategories = async () => {
+    if (!selectedDay || !currentWeek) return;
+
+    try {
+      const categorized = await categorizeVolunteers(selectedDay, currentWeek.id);
+      setCategorized(categorized);
+    } catch (error) {
+      console.error("Error categorizing volunteers:", error);
+    }
+  };
+
+  const handlePreviousWeek = () => {
+    const prevWeek = getPreviousWeek(currentWeekStart);
+    setCurrentWeekStart(prevWeek);
+    setSelectedDay(null);
+    setSelectedRouteId(null);
+  };
+
+  const handleNextWeek = () => {
+    const nextWeek = getNextWeek(currentWeekStart);
+    setCurrentWeekStart(nextWeek);
+    setSelectedDay(null);
+    setSelectedRouteId(null);
+  };
+
+  const handleCopyPreviousWeek = async () => {
+    if (!currentWeek) return;
+
+    // Warning confirmation
+    const confirmCopy = confirm(
+      "⚠️ WARNING: This will DELETE all current assignments for this week and replace them with last week's schedule.\n\n" +
+      "This action cannot be undone. Are you sure you want to continue?"
+    );
+
+    if (!confirmCopy) {
+      return;
+    }
+
+    setCopyingWeek(true);
+    setErrorMessage(null);
+    try {
+      await copyPreviousWeek(currentWeekStart);
+      await loadWeekData(); // Refresh data
+      setSuccessMessage("Previous week copied successfully! All current assignments have been replaced.");
+    } catch (error: any) {
+      setErrorMessage(error.message || "Failed to copy previous week");
+    } finally {
+      setCopyingWeek(false);
+    }
+  };
+
+  const handlePublishWeek = async () => {
+    if (!currentWeek) return;
+
+    if (!confirm("Are you sure you want to publish this week? Volunteers will be notified of their assignments.")) {
+      return;
+    }
+
+    setPublishingWeek(true);
+    setErrorMessage(null);
+    try {
+      await publishWeek(currentWeek.id);
+      await loadWeekData(); // Refresh data
+      setSuccessMessage("Week published successfully!");
+    } catch (error) {
+      setErrorMessage("Failed to publish week");
+    } finally {
+      setPublishingWeek(false);
+    }
+  };
+
+  const handleDayClick = (day: string) => {
+    setSelectedDay(day);
+    setSelectedRouteId(null);
+  };
+
+  const handleBackToWeek = () => {
+    setSelectedDay(null);
+    setSelectedRouteId(null);
+  };
+
+  const handleRouteClick = (routeId: string, routeNumber: number) => {
+    setSelectedRouteId(routeId);
+    setSelectedRouteNumber(routeNumber);
+  };
+
+  const handleAssignVolunteer = async (volunteerId: string) => {
+    if (!currentWeek || !selectedDay || !selectedRouteId) return;
+
+    setAssigning(true);
+    setErrorMessage(null);
+    try {
+      await assignVolunteer(currentWeek.id, selectedDay, selectedRouteId, volunteerId);
+      await loadWeekData(); // Refresh assignments
+      setSuccessMessage("Volunteer assigned successfully!");
+      // Keep sidebar open after assignment
+    } catch (error: any) {
+      setErrorMessage(error.message || "Failed to assign volunteer");
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const handleRemoveVolunteer = async (volunteerId: string) => {
+    if (!currentWeek || !selectedDay || !selectedRouteId) return;
+
+    setAssigning(true);
+    setErrorMessage(null);
+    try {
+      const { removeVolunteerFromRoute } = await import("@/lib/supabase/admin");
+      await removeVolunteerFromRoute(currentWeek.id, selectedDay, selectedRouteId, volunteerId);
+      await loadWeekData(); // Refresh assignments
+      setSuccessMessage("Volunteer removed successfully!");
+      // Keep sidebar open after removal
+    } catch (error: any) {
+      setErrorMessage(error.message || "Failed to remove volunteer");
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const handleCloseSidebar = () => {
+    setSelectedRouteId(null);
+  };
+
+  // Calculate assignment counts for each day
+  const assignmentCounts = assignments.reduce((acc, assignment) => {
+    if (assignment.volunteer_id) {
+      acc[assignment.day_of_week] = (acc[assignment.day_of_week] || 0) + 1;
+    }
+    return acc;
+  }, {} as { [key: string]: number });
+
+  // Create volunteer map for quick lookup
+  const volunteerMap = volunteers.reduce((acc, v) => {
+    acc[v.id] = { first_name: v.first_name, last_name: v.last_name };
+    return acc;
+  }, {} as { [key: string]: { first_name: string; last_name: string } });
+
+  // Get all current volunteers for selected route
+  const currentAssignments = assignments.filter(
+    (a) => a.day_of_week === selectedDay && a.route_id === selectedRouteId && a.volunteer_id
+  );
+  const currentVolunteers = currentAssignments.map((a) => ({
+    id: a.volunteer_id!,
+    ...volunteerMap[a.volunteer_id!],
+  })).filter((v) => v.first_name && v.last_name);
+
+  // Get assignments for selected day
+  const dayAssignments = selectedDay
+    ? assignments.filter((a) => a.day_of_week === selectedDay)
+    : [];
+
+  // Get the selected day's date
+  const selectedDayDate = selectedDay && currentWeek
+    ? getWeekDays(new Date(currentWeek.week_start_date)).find((d) => d.day === selectedDay)?.date
+    : null;
+
+  if (loading) {
+    return (
+      <div className="relative z-10 max-w-6xl mx-auto">
+        <div className="text-center text-darkBlue">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!currentWeek) {
+    return (
+      <div className="relative z-10 max-w-6xl mx-auto">
+        <div className="text-center text-darkBlue">Failed to load week data</div>
+      </div>
+    );
+  }
+
+  const { start, end } = getWeekRange(currentWeekStart);
+
   return (
-    <div className="relative z-10 max-w-6xl mx-auto">
+    <div className="relative z-10 max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
       {/* Header */}
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="flex justify-between items-center mb-8"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.2 }}
+        className="mb-10"
       >
-        <div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-primary-light bg-clip-text text-transparent">
-            Admin Portal
-          </h1>
-          <p className="text-darkBlue/70 mt-1">Meals on Wheels Orange County</p>
+        <div className="flex justify-between items-start mb-6">
+          <div className="flex items-center gap-6">
+            <MealsOnWheelsLogo className="w-48" />
+            <div className="border-l-2 border-primary/30 pl-6">
+              <h1 className="text-4xl font-bold text-darkBlue">
+                Admin Portal
+              </h1>
+              <p className="text-darkBlue/70 mt-1 text-base">Volunteer Coordination</p>
+            </div>
+          </div>
+          <LogoutButton />
         </div>
-        <LogoutButton />
       </motion.div>
+
+      {/* Success/Error Messages */}
+      {(errorMessage || successMessage) && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          className="mb-6"
+        >
+          {errorMessage && (
+            <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+              <div className="flex items-center">
+                <svg className="w-6 h-6 text-red-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-red-700 font-medium">{errorMessage}</p>
+              </div>
+            </div>
+          )}
+          {successMessage && (
+            <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-lg">
+              <div className="flex items-center">
+                <svg className="w-6 h-6 text-green-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-green-700 font-medium">{successMessage}</p>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      )}
 
       {/* Main content */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.2 }}
-        className="neumorphic rounded-3xl p-12 shadow-neumorphic"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.2 }}
       >
-        <div className="text-center">
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.4 }}
-            className="mb-6"
-          >
-            <div className="inline-block p-6 bg-primary/10 rounded-full mb-4 shadow-[6px_6px_12px_rgba(0,180,193,0.2),-6px_-6px_12px_rgba(255,255,255,0.8),inset_2px_2px_4px_rgba(0,180,193,0.1)]">
-              <svg
-                className="w-16 h-16 text-primary"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                />
-              </svg>
-            </div>
-          </motion.div>
-          <motion.h2
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.6 }}
-            className="text-2xl font-semibold text-darkBlue mb-4"
-          >
-            Welcome to the Admin Portal
-          </motion.h2>
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.8 }}
-            className="text-darkBlue/70 text-lg"
-          >
-            Volunteer management features coming soon...
-          </motion.p>
-        </div>
+        {!selectedDay ? (
+          /* Week Overview */
+          <AdminDashboard
+            weekStart={start}
+            weekEnd={end}
+            onPreviousWeek={handlePreviousWeek}
+            onNextWeek={handleNextWeek}
+            onCopyPreviousWeek={handleCopyPreviousWeek}
+            onPublishWeek={handlePublishWeek}
+            onDayClick={handleDayClick}
+            assignmentCounts={assignmentCounts}
+            isPublished={currentWeek.published}
+            copyingWeek={copyingWeek}
+            publishingWeek={publishingWeek}
+          />
+        ) : (
+          /* Day View with Routes */
+          <DayView
+            day={selectedDay}
+            date={selectedDayDate || new Date()}
+            routes={routes}
+            assignments={dayAssignments}
+            onRouteClick={handleRouteClick}
+            onBack={handleBackToWeek}
+            selectedRouteId={selectedRouteId}
+            volunteers={volunteerMap}
+            isPublished={currentWeek.published}
+          />
+        )}
       </motion.div>
+
+      {/* Route Sidebar */}
+      {selectedRouteId && selectedRouteNumber && (
+        <RouteSidebar
+          routeNumber={selectedRouteNumber}
+          currentVolunteers={currentVolunteers}
+          volunteers={categorized}
+          onAssign={handleAssignVolunteer}
+          onRemove={handleRemoveVolunteer}
+          onClose={handleCloseSidebar}
+          assigning={assigning}
+        />
+      )}
     </div>
   );
 }
