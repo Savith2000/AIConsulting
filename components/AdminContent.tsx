@@ -197,12 +197,12 @@ export default function AdminContent() {
       (a) => a.day_of_week === selectedDay && a.route_id === selectedRouteId && a.volunteer_id
     );
     const currentCount = routeAssignments.length;
-    
+
     const routeRequirement = routeRequirements.find(
       (req) => req.day_of_week === selectedDay && req.route_id === selectedRouteId
     );
     const maxVolunteers = routeRequirement?.max_volunteers || 1;
-    
+
     // Check if route is already at capacity
     if (currentCount >= maxVolunteers) {
       setErrorMessage(
@@ -251,34 +251,34 @@ export default function AdminContent() {
   const assignmentCounts = (() => {
     const counts: { [key: string]: number } = {};
     const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-    
+
     days.forEach((day) => {
       // Get all routes for this day
       const dayRoutes = routes;
       let fullyStaffedCount = 0;
-      
+
       dayRoutes.forEach((route) => {
         // Get assignments for this route on this day
         const routeAssignments = assignments.filter(
           (a) => a.day_of_week === day && a.route_id === route.id && a.volunteer_id
         );
         const currentCount = routeAssignments.length;
-        
+
         // Get max volunteers for this route
         const requirement = routeRequirements.find(
           (req) => req.day_of_week === day && req.route_id === route.id
         );
         const maxVolunteers = requirement?.max_volunteers || 1;
-        
+
         // Only count if fully staffed
         if (currentCount >= maxVolunteers) {
           fullyStaffedCount++;
         }
       });
-      
+
       counts[day] = fullyStaffedCount;
     });
-    
+
     return counts;
   })();
 
@@ -311,9 +311,9 @@ export default function AdminContent() {
   // Get the selected day's date - parse as local time to avoid timezone issues
   const selectedDayDate = selectedDay && currentWeek
     ? (() => {
-        const weekStart = parseDateFromDB(currentWeek.week_start_date);
-        return getWeekDays(weekStart).find((d) => d.day === selectedDay)?.date;
-      })()
+      const weekStart = parseDateFromDB(currentWeek.week_start_date);
+      return getWeekDays(weekStart).find((d) => d.day === selectedDay)?.date;
+    })()
     : null;
 
   if (loading) {

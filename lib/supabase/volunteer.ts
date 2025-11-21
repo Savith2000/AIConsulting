@@ -122,12 +122,12 @@ export async function getMyRoutes(volunteerId: string): Promise<VolunteerRoutesB
     // Convert map to array and sort by week start date
     const dayOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
     const result = Array.from(weekMap.values());
-    
+
     // Sort weeks by start date
     result.sort((a, b) => {
       return new Date(a.weekStartDate).getTime() - new Date(b.weekStartDate).getTime();
     });
-    
+
     // Sort routes within each week by day
     result.forEach((week) => {
       week.routes.sort((a, b) => {
@@ -213,6 +213,43 @@ export async function cancelRoute(
     }
 
     console.log("Cancellation successful!");
+
+    // Trigger SMS notification (non-blocking)
+    try {
+      // Get week information to calculate slot date
+      const { data: weekData } = await supabase
+        .from("weeks")
+        .select("week_start_date")
+        .eq("id", assignment.week_id)
+        .single();
+
+      if (weekData) {
+        // Calculate the slot date based on day of week
+        const dayIndex = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].indexOf(assignment.day_of_week);
+        const weekStart = new Date(weekData.week_start_date);
+        const slotDate = new Date(weekStart);
+        slotDate.setDate(weekStart.getDate() + dayIndex);
+
+        // Call notification API (don't await - fire and forget)
+        fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/cancel-notification`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            assignmentId,
+            weekId: assignment.week_id,
+            dayOfWeek: assignment.day_of_week,
+            routeId: assignment.route_id,
+            slotDate: slotDate.toISOString(),
+          }),
+        }).catch((error) => {
+          console.error("Failed to send notification (non-blocking):", error);
+        });
+      }
+    } catch (notificationError) {
+      // Log but don't throw - notification errors shouldn't block cancellation
+      console.error("Error triggering notification:", notificationError);
+    }
+
     return true;
   } catch (error) {
     console.error("Error in cancelRoute:", error);
@@ -233,7 +270,7 @@ export async function getOpenSlots(volunteerId: string): Promise<OpenSlot[]> {
       .from("weeks")
       .select("id, week_start_date, week_end_date")
       .eq("published", true)
-      .order("week_start_date", { ascending: true});
+      .order("week_start_date", { ascending: true });
 
     if (weeksError) throw weeksError;
     if (!weeks || weeks.length === 0) return [];
