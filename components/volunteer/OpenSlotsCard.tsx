@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { CalendarPlus, ChevronDown, ChevronUp, Plus, CheckCircle2 } from "lucide-react";
 import { getOpenSlots, signUpForRoute, type OpenSlot } from "@/lib/supabase/volunteer";
 
 interface OpenSlotsCardProps {
@@ -20,7 +21,7 @@ interface SlotsByWeek {
   };
 }
 
-export default function OpenSlotsCard({ userId, onSlotChanged, refreshTrigger }: OpenSlotsCardProps) {
+const OpenSlotsCard = React.memo(function OpenSlotsCard({ userId, onSlotChanged, refreshTrigger }: OpenSlotsCardProps) {
   const [slots, setSlots] = useState<OpenSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +39,7 @@ export default function OpenSlotsCard({ userId, onSlotChanged, refreshTrigger }:
       setError(null);
       const data = await getOpenSlots(userId);
       setSlots(data);
-      
+
       // Auto-expand the first week only on initial load
       if (showLoading && data.length > 0) {
         const firstWeekId = data[0].weekId;
@@ -102,7 +103,7 @@ export default function OpenSlotsCard({ userId, onSlotChanged, refreshTrigger }:
     try {
       await signUpForRoute(userId, slot.weekId, slot.dayOfWeek, slot.routeId);
       setSuccessMessage(`Successfully signed up for Route ${slot.routeNumber} on ${slot.dayOfWeek}!`);
-      
+
       // Refresh slots to update availability (silent refresh)
       await fetchSlots(false);
       onSlotChanged?.();
@@ -110,10 +111,10 @@ export default function OpenSlotsCard({ userId, onSlotChanged, refreshTrigger }:
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
       console.error("Error signing up for route:", err);
-      
+
       // Show user-friendly error messages
       let errorMessage = "Failed to sign up for route";
-      
+
       if (err.message) {
         // Check for specific error messages from the database function
         if (err.message.includes("slot is now full") || err.message.includes("full")) {
@@ -124,13 +125,13 @@ export default function OpenSlotsCard({ userId, onSlotChanged, refreshTrigger }:
           errorMessage = err.message;
         }
       }
-      
+
       setError(errorMessage);
-      
+
       // Refresh slots after error to show updated availability
       // (e.g., if someone else took the slot while they were trying)
       await fetchSlots(false);
-      
+
       // Clear error after 5 seconds
       setTimeout(() => setError(null), 5000);
     } finally {
@@ -233,11 +234,14 @@ export default function OpenSlotsCard({ userId, onSlotChanged, refreshTrigger }:
   }
 
   return (
-    <div className="neumorphic p-10 h-[500px] w-full flex flex-col overflow-hidden">
-      {/* Header - Fixed */}
+    <div className="neumorphic p-8 h-[550px] w-full flex flex-col overflow-hidden">
+      {/* Header */}
       <div className="flex-shrink-0 mb-6">
-        <h2 className="text-3xl font-bold text-darkBlue mb-2">Open Slots</h2>
-        <p className="text-textSecondary">
+        <div className="flex items-center gap-2 mb-1">
+          <CalendarPlus className="w-7 h-7 text-primary" strokeWidth={2.5} />
+          <h2 className="text-2xl font-bold text-darkBlue">Open Slots</h2>
+        </div>
+        <p className="text-textSecondary text-base">
           {slots.length} slot{slots.length !== 1 ? "s" : ""} available
         </p>
       </div>
@@ -281,9 +285,7 @@ export default function OpenSlotsCard({ userId, onSlotChanged, refreshTrigger }:
           return (
             <div key={weekId} className="neumorphic-inset rounded-xl overflow-hidden">
               {/* Week Header */}
-              <motion.button
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
+              <button
                 onClick={() => toggleWeek(weekId)}
                 className="w-full p-5 flex items-center justify-between bg-white hover:bg-primary/5 transition-colors"
               >
@@ -293,17 +295,13 @@ export default function OpenSlotsCard({ userId, onSlotChanged, refreshTrigger }:
                   </svg>
                   <span className="text-lg font-bold text-darkBlue">{weekData.weekLabel}</span>
                 </div>
-                <motion.svg
+                <motion.div
                   animate={{ rotate: isWeekExpanded ? 180 : 0 }}
                   transition={{ duration: 0.2 }}
-                  className="w-6 h-6 text-darkBlue"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </motion.svg>
-              </motion.button>
+                  <ChevronDown className="w-6 h-6 text-darkBlue" strokeWidth={2} />
+                </motion.div>
+              </button>
 
               {/* Days - Collapsible */}
               <AnimatePresence>
@@ -325,8 +323,9 @@ export default function OpenSlotsCard({ userId, onSlotChanged, refreshTrigger }:
                           <div key={dayKey} className="neumorphic rounded-xl overflow-hidden">
                             {/* Day Header */}
                             <motion.button
-                              whileHover={{ scale: 1.01 }}
-                              whileTap={{ scale: 0.99 }}
+                              whileHover={{ scale: 1.02, x: 2 }}
+                              whileTap={{ scale: 0.98 }}
+                              transition={{ type: "spring", stiffness: 400, damping: 12 }}
                               onClick={() => toggleDay(weekId, day)}
                               className="w-full p-4 flex items-center justify-between bg-white hover:bg-primary/5 transition-colors"
                             >
@@ -338,16 +337,12 @@ export default function OpenSlotsCard({ userId, onSlotChanged, refreshTrigger }:
                                   {daySlots.length} slot{daySlots.length !== 1 ? "s" : ""} available
                                 </span>
                               </div>
-                              <motion.svg
+                              <motion.div
                                 animate={{ rotate: isDayExpanded ? 180 : 0 }}
                                 transition={{ duration: 0.2 }}
-                                className="w-5 h-5 text-darkBlue"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
                               >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </motion.svg>
+                                <ChevronDown className="w-5 h-5 text-darkBlue" strokeWidth={2} />
+                              </motion.div>
                             </motion.button>
 
                             {/* Routes - Collapsible */}
@@ -386,13 +381,17 @@ export default function OpenSlotsCard({ userId, onSlotChanged, refreshTrigger }:
                                             </div>
                                           </div>
 
-                                          <button
+                                          <motion.button
+                                            whileHover={{ scale: 1.08, y: -2 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            transition={{ type: "spring", stiffness: 400, damping: 10 }}
                                             onClick={() => handleSignUp(slot)}
                                             disabled={isSigningUp}
-                                            className="px-6 py-2 bg-limeGreen text-white font-semibold rounded-lg hover:bg-limeGreen/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+                                            className="px-6 py-2 bg-limeGreen text-white font-semibold rounded-lg hover:bg-limeGreen/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center gap-2"
                                           >
+                                            <Plus className="w-4 h-4" strokeWidth={2.5} />
                                             {isSigningUp ? "Signing up..." : "Sign Up"}
-                                          </button>
+                                          </motion.button>
                                         </div>
                                       );
                                     })}
@@ -413,4 +412,6 @@ export default function OpenSlotsCard({ userId, onSlotChanged, refreshTrigger }:
       </div>
     </div>
   );
-}
+});
+
+export default OpenSlotsCard;

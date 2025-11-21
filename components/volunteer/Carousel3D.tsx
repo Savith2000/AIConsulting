@@ -1,7 +1,8 @@
 "use client";
 
-import { ReactNode } from "react";
-import { motion, PanInfo } from "framer-motion";
+import { ReactNode, useEffect } from "react";
+import { motion } from "framer-motion";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Carousel3DProps {
   cards: ReactNode[];
@@ -9,103 +10,112 @@ interface Carousel3DProps {
   onIndexChange: (index: number) => void;
 }
 
-export default function Carousel3D({ cards, activeIndex, onIndexChange }: Carousel3DProps) {
-  const handleDragEnd = (_: any, info: PanInfo) => {
-    const threshold = 100;
+const MAX_VISIBILITY = 2;
 
-    if (info.offset.x > threshold && activeIndex > 0) {
-      // Swiped right, go to previous card
-      onIndexChange(activeIndex - 1);
-    } else if (info.offset.x < -threshold && activeIndex < cards.length - 1) {
-      // Swiped left, go to next card
-      onIndexChange(activeIndex + 1);
-    }
-  };
+export default function Carousel3D({
+  cards,
+  activeIndex,
+  onIndexChange,
+}: Carousel3DProps) {
+  const count = cards.length;
 
-  const getCardStyle = (index: number) => {
-    const offset = index - activeIndex;
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft" && activeIndex > 0) {
+        onIndexChange(activeIndex - 1);
+      } else if (e.key === "ArrowRight" && activeIndex < count - 1) {
+        onIndexChange(activeIndex + 1);
+      }
+    };
 
-    if (offset === 0) {
-      // Center card - use -50% to center from left: 50%
-      return {
-        x: "-50%",
-        scale: 1,
-        opacity: 1,
-        zIndex: 30,
-        filter: "blur(0px)",
-      };
-    } else if (offset === -1) {
-      // Left card
-      return {
-        x: "calc(-50% - 450px)",
-        scale: 0.85,
-        opacity: 0.5,
-        zIndex: 10,
-        filter: "blur(2px)",
-      };
-    } else if (offset === 1) {
-      // Right card
-      return {
-        x: "calc(-50% + 450px)",
-        scale: 0.85,
-        opacity: 0.5,
-        zIndex: 10,
-        filter: "blur(2px)",
-      };
-    } else {
-      // Hidden cards
-      return {
-        x: offset > 0 ? "calc(-50% + 800px)" : "calc(-50% - 800px)",
-        scale: 0.7,
-        opacity: 0,
-        zIndex: 0,
-        filter: "blur(4px)",
-      };
-    }
-  };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeIndex, count, onIndexChange]);
 
   return (
-    <div className="relative w-full" style={{ height: "560px" }}>
-      {cards.map((card, index) => {
-        const style = getCardStyle(index);
-        // Use React key from card if available, otherwise use index
-        const cardKey = (card as any)?.key || `card-${index}`;
+    // Reduced vertical padding for better screen fit
+    <div className="relative w-full flex items-center justify-center py-4">
+      {/* 3D Carousel Container (width only, height is auto) */}
+      <div
+        className="relative w-[850px] max-w-[90vw]"
+        style={{
+          perspective: "1200px",
+          transformStyle: "preserve-3d",
+        }}
+      >
+        {cards.map((card, i) => {
+          const offset = activeIndex - i;
+          const absOffset = Math.abs(offset);
+          const direction = Math.sign(offset);
+          const isActive = i === activeIndex;
 
-        return (
-          <motion.div
-            key={cardKey}
-            drag={index === activeIndex ? "x" : false}
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.2}
-            onDragEnd={handleDragEnd}
-            animate={style}
-            transition={{
-              duration: 0.3,
-              ease: "easeOut",
-            }}
-            style={{
-              position: "absolute",
-              top: "30px",
-              left: "50%",
-              width: "640px",
-              maxWidth: "95vw",
-              height: "500px",
-              cursor: index === activeIndex ? "grab" : "default",
-            }}
-            className="select-none"
-          >
+          if (absOffset >= 2) {
+            return null;
+          }
+
+          return (
             <div
-              className="w-full"
+              key={i}
+              className="absolute inset-0 transition-all duration-300 ease-out"
               style={{
-                pointerEvents: index === activeIndex ? "auto" : "none",
+                pointerEvents: isActive ? "auto" : "none",
+                opacity: absOffset >= MAX_VISIBILITY ? 0 : 1,
+                display: absOffset > MAX_VISIBILITY ? "none" : "block",
+                transform: `
+                  rotateY(${offset * 40}deg)
+                  translateZ(${absOffset * -25}rem)
+                  translateX(${direction * -4}rem)
+                  scaleY(${1 + absOffset * -0.3})
+                `,
+                filter: `blur(${absOffset * 0.8}rem)`,
+                transformStyle: "preserve-3d",
               }}
             >
-              {card}
+              {/* Card wrapper – height is driven by content */}
+              <div className="w-full rounded-2xl shadow-2xl bg-white overflow-hidden transition-all duration-300 ease-out">
+                <div
+                  className="w-full h-full transition-opacity duration-300"
+                  style={{ opacity: isActive ? 1 : 0.4 }}
+                >
+                  {card}
+                </div>
+              </div>
             </div>
-          </motion.div>
-        );
-      })}
+          );
+        })}
+
+        {/* Navigation Buttons - Positioned outside card area */}
+        {activeIndex > 0 && (
+          <button
+            onClick={() => onIndexChange(activeIndex - 1)}
+            className="absolute top-[275px] -left-28 transform -translate-y-1/2 z-20 w-16 h-16 rounded-full bg-primary/90 text-white flex items-center justify-center hover:bg-primary transition-colors duration-200 shadow-2xl backdrop-blur-sm border-2 border-white/20"
+          >
+            <motion.div
+              whileHover={{ scale: 1.15, rotate: -5 }}
+              whileTap={{ scale: 0.9 }}
+              transition={{ type: "spring", stiffness: 400, damping: 10 }}
+            >
+              <ChevronLeft className="w-8 h-8" strokeWidth={3} />
+            </motion.div>
+          </button>
+        )}
+
+        {activeIndex < count - 1 && (
+          <button
+            onClick={() => onIndexChange(activeIndex + 1)}
+            className="absolute top-[275px] -right-28 transform -translate-y-1/2 z-20 w-16 h-16 rounded-full bg-primary/90 text-white flex items-center justify-center hover:bg-primary transition-colors duration-200 shadow-2xl backdrop-blur-sm border-2 border-white/20"
+          >
+            <motion.div
+              whileHover={{ scale: 1.15, rotate: 5 }}
+              whileTap={{ scale: 0.9 }}
+              transition={{ type: "spring", stiffness: 400, damping: 10 }}
+            >
+              <ChevronRight className="w-8 h-8" strokeWidth={3} />
+            </motion.div>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
-

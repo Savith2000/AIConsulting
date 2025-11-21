@@ -38,13 +38,13 @@ export default function VolunteerDashboard({ userId, userEmail }: VolunteerDashb
   ];
 
   return (
-    <div className="relative z-10 w-full max-w-[1400px] mx-auto px-4 sm:px-8 lg:px-12 py-8 sm:py-12">
+    <div className="relative z-10 w-full max-w-[1400px] mx-auto px-4 sm:px-8 lg:px-12 py-4 sm:py-6">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        className="mb-12"
+        className="mb-6"
       >
         <div className="flex justify-between items-start mb-6">
           <div className="flex items-center gap-6">
@@ -91,7 +91,7 @@ export default function VolunteerDashboard({ userId, userEmail }: VolunteerDashb
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3, delay: 0.5 }}
-        className="text-center mt-8"
+        className="text-center mt-4"
       >
         <p className="text-textSecondary text-sm">
           <span className="inline-block mr-2">←</span>

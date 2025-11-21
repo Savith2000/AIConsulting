@@ -31,10 +31,12 @@ export default function CarouselNav({ items, activeIndex, onIndexChange }: Carou
               <motion.div
                 layoutId="activeTab"
                 className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-full"
+                style={{ willChange: 'transform' }}
                 transition={{
                   type: "spring",
-                  stiffness: 400,
-                  damping: 30,
+                  stiffness: 500,
+                  damping: 35,
+                  mass: 0.5,
                 }}
               />
             )}
