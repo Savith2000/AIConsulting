@@ -1,5 +1,5 @@
 # MOWOCNC Volunteer Dashboard
-
+![Meals on Wheels Dashboard](public/assets/mow.png)
 A modern volunteer dashboard for Meals on Wheels Orange County, built with Next.js, Supabase, and Tailwind CSS.
 
 ## Features
